@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="SyncView"/>
+  <title>SyncView</title>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Unbounded:wght@300;400;700;900&display=swap" rel="stylesheet"/>
+
+  <style>
+    :root {
+      --bg:      #05080a;
+      --surface: #0b1014;
+      --card:    #111820;
+      --border:  #1c2a35;
+      --border2: #253545;
+      --green:   #00ff88;
+      --blue:    #0095ff;
+      --red:     #ff4455;
+      --orange:  #ff9500;
+      --text:    #d4e8f0;
+      --muted:   #3d5a6a;
+      --glow-g:  0 0 24px rgba(0,255,136,.3);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Mono', monospace;
+      min-height: 100dvh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(ellipse 60% 50% at 20% 20%, rgba(0,255,136,.04) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 60% at 80% 80%, rgba(0,149,255,.04) 0%, transparent 60%);
+    }
+    body::after {
+      content: '';
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        linear-gradient(rgba(0,255,136,.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,255,136,.018) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+
+    .page { display: none; position: relative; z-index: 1; }
+    .page.active { display: flex; flex-direction: column; min-height: 100dvh; }
+
+    /* ── AUTH ── */
+    #page-auth { align-items: center; justify-content: center; padding: 2rem 1.5rem; gap: 3rem; }
+    .hero { text-align: center; animation: fadeUp .7s ease both; }
+    .hero-word {
+      font-family: 'Unbounded', sans-serif; font-weight: 900;
+      font-size: clamp(3rem, 12vw, 6rem); line-height: .9;
+      letter-spacing: -.03em; color: #fff;
+    }
+    .hero-word .g { color: var(--green); }
+    .hero-sub { margin-top: 1rem; font-size: .65rem; letter-spacing: .22em; text-transform: uppercase; color: var(--muted); }
+    .auth-card {
+      width: 100%; max-width: 380px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 20px; padding: 2rem;
+      animation: fadeUp .7s .15s ease both;
+    }
+    .auth-tagline { font-size: .78rem; color: var(--muted); line-height: 1.7; margin-bottom: 2rem; text-align: center; }
+    .auth-tagline strong { color: var(--text); }
+    .google-btn {
+      width: 100%; display: flex; align-items: center; justify-content: center; gap: .85rem;
+      background: #fff; color: #1a1a1a; border: none; border-radius: 12px;
+      padding: .95rem 1.5rem; font-family: 'Space Mono', monospace;
+      font-size: .8rem; font-weight: 700; letter-spacing: .04em;
+      cursor: pointer; transition: all .2s; position: relative; overflow: hidden;
+    }
+    .google-btn:hover { filter: brightness(.95); }
+    .google-btn:active { transform: scale(.98); }
+    .auth-note { margin-top: 1.25rem; font-size: .6rem; color: var(--muted); text-align: center; line-height: 1.7; letter-spacing: .04em; }
+
+    /* ── DEVICES ── */
+    #page-devices { padding: 0; }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 1.5rem; border-bottom: 1px solid var(--border);
+      background: rgba(11,16,20,.8); backdrop-filter: blur(16px);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .topbar-brand { font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 1rem; color: #fff; }
+    .topbar-brand span { color: var(--green); }
+    .user-chip { display: flex; align-items: center; gap: .6rem; }
+    .user-chip img { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--border2); object-fit: cover; }
+    .user-chip .uname { font-size: .7rem; color: var(--muted); max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .logout-btn {
+      background: transparent; border: 1px solid var(--border); color: var(--muted);
+      border-radius: 6px; padding: .3rem .6rem; font-size: .6rem;
+      font-family: 'Space Mono', monospace; cursor: pointer; margin-left: .5rem;
+      transition: all .2s; letter-spacing: .06em;
+    }
+    .logout-btn:hover { border-color: var(--red); color: var(--red); }
+    .devices-body { flex: 1; padding: 2rem 1.5rem; max-width: 600px; margin: 0 auto; width: 100%; }
+    .section-label { font-size: .6rem; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); margin-bottom: 1rem; }
+    .this-device-card {
+      background: var(--card); border: 1px solid var(--border2); border-radius: 14px;
+      padding: 1.1rem 1.25rem; display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem;
+    }
+    .device-icon-wrap {
+      width: 46px; height: 46px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem; flex-shrink: 0;
+    }
+    .device-icon-wrap.pc    { background: rgba(0,149,255,.12); }
+    .device-icon-wrap.phone { background: rgba(0,255,136,.12); }
+    .device-info { flex: 1; min-width: 0; }
+    .device-name { font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: .85rem; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .device-type { font-size: .62rem; color: var(--muted); margin-top: .2rem; letter-spacing: .08em; }
+    .online-pill {
+      display: flex; align-items: center; gap: .4rem;
+      background: rgba(0,255,136,.08); border: 1px solid rgba(0,255,136,.2);
+      border-radius: 20px; padding: .3rem .7rem; font-size: .6rem; color: var(--green);
+      letter-spacing: .08em; white-space: nowrap;
+    }
+    .online-pill .dot-live { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: blink 1.5s infinite; }
+    @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:.3; } }
+    .devices-list { display: flex; flex-direction: column; gap: .75rem; }
+    .peer-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 1.1rem 1.25rem; display: flex; align-items: center; gap: 1rem;
+      cursor: pointer; transition: all .2s; position: relative; overflow: hidden;
+    }
+    .peer-card::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(90deg, rgba(0,255,136,.04), transparent);
+      opacity: 0; transition: opacity .2s;
+    }
+    .peer-card:hover { border-color: var(--green); }
+    .peer-card:hover::before { opacity: 1; }
+    .peer-card:active { transform: scale(.99); }
+    .peer-card.offline { opacity: .45; cursor: default; }
+    .peer-card.offline:hover { border-color: var(--border); }
+    .peer-card.offline::before { display: none; }
+    .peer-status { text-align: right; flex-shrink: 0; }
+    .connect-arrow { font-size: .62rem; color: var(--green); letter-spacing: .06em; }
+    .offline-label { font-size: .6rem; color: var(--muted); letter-spacing: .08em; }
+    .empty-state { text-align: center; padding: 3rem 1.5rem; color: var(--muted); }
+    .empty-state .big { font-size: 3rem; margin-bottom: .75rem; }
+    .empty-state p { font-size: .72rem; line-height: 1.8; }
+    .empty-state code { background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: .1rem .4rem; font-size: .68rem; color: var(--green); }
+
+    /* ── INCOMING ── */
+    #page-incoming { align-items: center; justify-content: center; padding: 2rem; gap: 2rem; }
+    .incoming-ring {
+      width: 120px; height: 120px; border-radius: 50%;
+      background: rgba(0,255,136,.08); border: 2px solid var(--green);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 3.5rem; animation: ring 1s ease infinite;
+    }
+    @keyframes ring { 0%,100% { box-shadow: 0 0 0 0 rgba(0,255,136,.4); } 50% { box-shadow: 0 0 0 24px rgba(0,255,136,0); } }
+    .incoming-info { text-align: center; }
+    .incoming-from { font-family: 'Unbounded', sans-serif; font-size: 1.2rem; font-weight: 700; color: #fff; }
+    .incoming-sub { font-size: .72rem; color: var(--muted); margin-top: .4rem; }
+    .call-actions { display: flex; gap: 1.5rem; }
+    .btn-accept, .btn-decline { width: 70px; height: 70px; border-radius: 50%; border: none; font-size: 1.8rem; cursor: pointer; transition: all .2s; }
+    .btn-accept { background: var(--green); box-shadow: 0 0 24px rgba(0,255,136,.4); }
+    .btn-accept:hover { filter: brightness(1.2); transform: scale(1.08); }
+    .btn-decline { background: var(--red); box-shadow: 0 0 24px rgba(255,68,85,.4); }
+    .btn-decline:hover { filter: brightness(1.2); transform: scale(1.08); }
+
+    /* ── CONNECTING ── */
+    #page-connecting { align-items: center; justify-content: center; padding: 2rem 1.5rem; gap: 2rem; }
+    .connecting-visual { position: relative; width: 140px; height: 140px; display: flex; align-items: center; justify-content: center; }
+    .connecting-visual .ring { position: absolute; border-radius: 50%; border: 1px solid rgba(0,255,136,.2); animation: expand 2s ease-out infinite; }
+    .connecting-visual .ring:nth-child(1) { width: 60px; height: 60px; animation-delay: 0s; }
+    .connecting-visual .ring:nth-child(2) { width: 90px; height: 90px; animation-delay: .5s; }
+    .connecting-visual .ring:nth-child(3) { width: 120px; height: 120px; animation-delay: 1s; }
+    @keyframes expand { 0% { opacity: .8; transform: scale(.8); } 100% { opacity: 0; transform: scale(1.2); } }
+    .connecting-visual .center-dot { width: 32px; height: 32px; border-radius: 50%; background: var(--green); box-shadow: var(--glow-g); position: relative; z-index: 1; }
+    .connecting-card { width: 100%; max-width: 360px; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
+    .conn-step { display: flex; align-items: center; gap: .85rem; padding: .65rem 0; border-bottom: 1px solid var(--border); font-size: .72rem; }
+    .conn-step:last-child { border-bottom: none; }
+    .step-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: all .4s; }
+    .step-dot.active { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .step-dot.spin { background: var(--blue); box-shadow: 0 0 8px var(--blue); animation: blink 1s infinite; }
+    .step-dot.err { background: var(--red); }
+
+    /* ── STREAM ── */
+    #page-stream { height: 100dvh; overflow: hidden; }
+    .stream-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: .8rem 1.25rem; background: rgba(11,16,20,.95);
+      backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .stream-brand { font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: .9rem; color: #fff; }
+    .stream-brand span { color: var(--green); }
+    .live-badge {
+      display: flex; align-items: center; gap: .4rem;
+      background: rgba(0,255,136,.1); border: 1px solid rgba(0,255,136,.25);
+      border-radius: 20px; padding: .3rem .8rem; font-size: .62rem; color: var(--green); letter-spacing: .1em;
+    }
+    .live-badge .dot-live { width: 5px; height: 5px; border-radius: 50%; background: var(--green); animation: blink 1.2s infinite; }
+    .video-container { flex: 1; display: grid; gap: 2px; background: #000; overflow: hidden; grid-template-rows: 1fr 1fr; }
+    @media (min-width: 768px) { .video-container { grid-template-rows: 1fr; grid-template-columns: 1fr 1fr; } }
+    .video-slot { position: relative; background: #000; overflow: hidden; }
+    .video-slot video { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+    .video-badge {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(0,0,0,.55); backdrop-filter: blur(10px);
+      border-radius: 6px; padding: .25rem .65rem; font-size: .58rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--border);
+    }
+    .video-badge.remote { color: var(--green); border-color: rgba(0,255,136,.25); }
+    .no-feed { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .6rem; color: var(--muted); font-size: .7rem; pointer-events: none; }
+    .no-feed .ico { font-size: 2.5rem; opacity: .4; }
+    .stream-controls {
+      display: flex; align-items: center; justify-content: center; gap: 1rem;
+      padding: .85rem 1rem; background: rgba(11,16,20,.95); border-top: 1px solid var(--border); flex-shrink: 0;
+    }
+    .ctrl-btn {
+      display: flex; flex-direction: column; align-items: center; gap: .3rem;
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: .65rem 1rem; font-family: 'Space Mono', monospace; font-size: .58rem; color: var(--muted);
+      cursor: pointer; transition: all .2s; letter-spacing: .06em; min-width: 70px;
+    }
+    .ctrl-btn .ico { font-size: 1.3rem; }
+    .ctrl-btn:hover { border-color: var(--green); color: var(--green); }
+    .ctrl-btn.danger { border-color: rgba(255,68,85,.3); }
+    .ctrl-btn.danger:hover { background: var(--red); color: #fff; border-color: var(--red); }
+    .ctrl-btn.active-ctrl { border-color: var(--orange); color: var(--orange); }
+
+    /* ── MISC ── */
+    #toast {
+      position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+      background: var(--card); border: 1px solid var(--border2); border-radius: 10px;
+      padding: .65rem 1.25rem; font-size: .72rem; color: var(--text);
+      opacity: 0; pointer-events: none; transition: opacity .25s;
+      z-index: 999; white-space: nowrap; max-width: 90vw; overflow: hidden; text-overflow: ellipsis;
+    }
+    #toast.show { opacity: 1; }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .spinner { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--border2); border-top-color: var(--green); animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .cancel-btn {
+      background: transparent; border: 1px solid var(--border); color: var(--muted);
+      border-radius: 8px; padding: .6rem 1.25rem; font-family: 'Space Mono', monospace;
+      font-size: .7rem; cursor: pointer; letter-spacing: .08em; transition: all .2s;
+    }
+    .cancel-btn:hover { border-color: var(--red); color: var(--red); }
+  </style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="page-auth" class="page">
+  <div class="hero">
+    <div class="hero-word">Sync<span class="g">View</span></div>
+    <p class="hero-sub">Partage d'écran · Pair-à-pair · Privé</p>
+  </div>
+  <div class="auth-card">
+    <p class="auth-tagline">
+      Connecte-toi avec Google.<br/>
+      <strong>Tous tes appareils</strong> se voient automatiquement — aucun code à saisir.
+    </p>
+    <button class="google-btn" onclick="signInGoogle()">
+      <svg width="20" height="20" viewBox="0 0 48 48">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.34-8.16 2.34-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      </svg>
+      Continuer avec Google
+    </button>
+    <p class="auth-note">
+      Même compte sur iPhone et PC.<br/>
+      Tes appareils se reconnectent automatiquement.
+    </p>
+  </div>
+</div>
+
+<!-- DEVICES -->
+<div id="page-devices" class="page">
+  <div class="topbar">
+    <div class="topbar-brand">Sync<span>View</span></div>
+    <div class="user-chip">
+      <img id="user-avatar" src="" alt=""/>
+      <span class="uname" id="user-name">—</span>
+      <button class="logout-btn" onclick="signOutUser()">⎋ Quitter</button>
+    </div>
+  </div>
+  <div class="devices-body">
+    <p class="section-label">Cet appareil</p>
+    <div class="this-device-card">
+      <div class="device-icon-wrap" id="my-device-icon">🖥️</div>
+      <div class="device-info">
+        <div class="device-name" id="my-device-name">Chargement…</div>
+        <div class="device-type" id="my-device-type">—</div>
+      </div>
+      <div class="online-pill"><div class="dot-live"></div> En ligne</div>
+    </div>
+    <p class="section-label">Autres appareils du compte</p>
+    <div class="devices-list" id="peers-list">
+      <div style="text-align:center; padding:2rem; color:var(--muted);">
+        <div class="spinner" style="margin:0 auto 1rem;"></div>
+        <div style="font-size:.72rem;">Chargement des appareils…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- INCOMING CALL -->
+<div id="page-incoming" class="page">
+  <div class="incoming-ring">📱</div>
+  <div class="incoming-info">
+    <div class="incoming-from" id="incoming-from">Appareil inconnu</div>
+    <div class="incoming-sub">veut partager son écran</div>
+  </div>
+  <div class="call-actions">
+    <button class="btn-decline" onclick="declineCall()">✕</button>
+    <button class="btn-accept" onclick="acceptCall()">✓</button>
+  </div>
+</div>
+
+<!-- CONNECTING -->
+<div id="page-connecting" class="page">
+  <div class="connecting-visual">
+    <div class="ring"></div><div class="ring"></div><div class="ring"></div>
+    <div class="center-dot"></div>
+  </div>
+  <div style="text-align:center;">
+    <div style="font-family:'Unbounded',sans-serif;font-weight:700;font-size:1rem;color:#fff;">Connexion en cours…</div>
+    <div style="font-size:.68rem;color:var(--muted);margin-top:.4rem;" id="connecting-to">—</div>
+  </div>
+  <div class="connecting-card">
+    <div class="conn-step"><div class="step-dot" id="s-auth"></div><span>Authentification Google</span></div>
+    <div class="conn-step"><div class="step-dot" id="s-media"></div><span id="s-media-label">Accès média local</span></div>
+    <div class="conn-step"><div class="step-dot" id="s-signal"></div><span id="s-signal-label">Signalisation Firebase</span></div>
+    <div class="conn-step"><div class="step-dot" id="s-rtc"></div><span id="s-rtc-label">Connexion WebRTC P2P</span></div>
+  </div>
+  <button class="cancel-btn" onclick="cancelCall()">Annuler</button>
+</div>
+
+<!-- STREAM -->
+<div id="page-stream" class="page">
+  <div class="stream-header">
+    <div class="stream-brand">Sync<span>View</span></div>
+    <div class="live-badge"><div class="dot-live"></div> EN DIRECT</div>
+  </div>
+  <div class="video-container">
+    <div class="video-slot">
+      <video id="local-video" autoplay muted playsinline></video>
+      <div class="video-badge" id="local-badge">Mon flux</div>
+      <div class="no-feed" id="no-local"><div class="ico">📡</div><span>Démarrage…</span></div>
+    </div>
+    <div class="video-slot">
+      <video id="remote-video" autoplay playsinline></video>
+      <div class="video-badge remote" id="remote-badge">Flux distant</div>
+      <div class="no-feed" id="no-remote"><div class="ico">⏳</div><span>En attente…</span></div>
+    </div>
+  </div>
+  <div class="stream-controls">
+    <button class="ctrl-btn" onclick="toggleMute()" id="btn-mute">
+      <span class="ico">🔊</span><span>Son</span>
+    </button>
+    <button class="ctrl-btn" onclick="toggleVideo()" id="btn-video">
+      <span class="ico">📹</span><span>Vidéo</span>
+    </button>
+    <button class="ctrl-btn danger" onclick="hangUp()">
+      <span class="ico">⬛</span><span>Fin</span>
+    </button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+// ── FIREBASE CONFIG ──────────────────────────────────
+const FB_CONFIG = {
+  apiKey:            "AIzaSyC0bW_TiF_tULI9Q1EhvX-3gq_TdZXUiRQ",
+  authDomain:        "partage-tel-pc.firebaseapp.com",
+  databaseURL:       "https://partage-tel-pc-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId:         "partage-tel-pc",
+  storageBucket:     "partage-tel-pc.firebasestorage.app",
+  messagingSenderId: "230342799293",
+  appId:             "1:230342799293:web:53263ff7ff571f23b8acd4",
+  measurementId:     "G-NTJ5DS9M67"
+};
+firebase.initializeApp(FB_CONFIG);
+const auth = firebase.auth();
+const db   = firebase.database();
+
+// ── GLOBALS ───────────────────────────────────────────
+let currentUser     = null;
+let myDeviceId      = null;
+let myDeviceRef     = null;
+let localStream     = null;
+let pc              = null;
+let remoteStream    = null;
+let activeCallRef   = null;
+let activeCallId    = null;
+let isCaller        = false;
+let pendingCallId   = null;
+let isMuted         = false;
+let isVideoOff      = false;
+let peersUnsub      = null;
+let incomingUnsub   = null;
+
+const IS_MOBILE = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+const ICE_CFG = { iceServers: [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+]};
+
+// ── UTILS ─────────────────────────────────────────────
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+let _tt;
+function toast(msg, ms = 3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_tt);
+  _tt = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+function setStep(id, state) {
+  const el = document.getElementById(id);
+  if (el) el.className = 'step-dot' + (state ? ' ' + state : '');
+}
+
+function devName()  { if (/iPhone/i.test(navigator.userAgent)) return 'iPhone'; if (/iPad/i.test(navigator.userAgent)) return 'iPad'; if (/Android/i.test(navigator.userAgent)) return 'Android'; if (/Mac/i.test(navigator.userAgent)) return 'Mac'; if (/Windows/i.test(navigator.userAgent)) return 'Windows PC'; return IS_MOBILE ? 'Mobile' : 'PC'; }
+function devEmoji() { return IS_MOBILE ? '📱' : '🖥️'; }
+function devType()  { return IS_MOBILE ? 'phone' : 'pc'; }
+
+// ── AUTH ──────────────────────────────────────────────
+function signInGoogle() {
+  const p = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(p).catch(e => { console.error(e); toast('❌ Connexion annulée'); });
+}
+function signOutUser() { cleanupDevice(); auth.signOut(); }
+
+auth.onAuthStateChanged(user => {
+  if (user) {
+    currentUser = user;
+    document.getElementById('user-avatar').src = user.photoURL || '';
+    document.getElementById('user-name').textContent = user.displayName || user.email;
+    registerDevice();
+    showPage('page-devices');
+  } else {
+    currentUser = null;
+    cleanupDevice();
+    showPage('page-auth');
+  }
+});
+
+// ── DEVICE PRESENCE ───────────────────────────────────
+function registerDevice() {
+  myDeviceId = localStorage.getItem('sv_dev_id');
+  if (!myDeviceId) { myDeviceId = Math.random().toString(36).substr(2, 10); localStorage.setItem('sv_dev_id', myDeviceId); }
+
+  const uid = currentUser.uid;
+  myDeviceRef = db.ref(`users/${uid}/devices/${myDeviceId}`);
+  myDeviceRef.set({ name: devName(), type: devType(), emoji: devEmoji(), online: true, lastSeen: firebase.database.ServerValue.TIMESTAMP, incomingCall: null });
+  myDeviceRef.onDisconnect().update({ online: false, lastSeen: firebase.database.ServerValue.TIMESTAMP });
+
+  document.getElementById('my-device-name').textContent = devName();
+  document.getElementById('my-device-type').textContent = devType() === 'phone' ? '📱 Appareil mobile' : '🖥️ Ordinateur';
+  document.getElementById('my-device-icon').textContent = devEmoji();
+  document.getElementById('my-device-icon').className   = 'device-icon-wrap ' + devType();
+
+  listenPeers(uid);
+  listenIncoming(uid);
+}
+
+function cleanupDevice() {
+  if (myDeviceRef) { myDeviceRef.update({ online: false }); myDeviceRef = null; }
+  if (peersUnsub)    { peersUnsub();    peersUnsub = null; }
+  if (incomingUnsub) { incomingUnsub(); incomingUnsub = null; }
+}
+
+function listenPeers(uid) {
+  const ref = db.ref(`users/${uid}/devices`);
+  const fn = ref.on('value', snap => {
+    const data = snap.val() || {};
+    const list = document.getElementById('peers-list');
+    list.innerHTML = '';
+    const peers = Object.entries(data).filter(([id]) => id !== myDeviceId);
+    if (!peers.length) {
+      list.innerHTML = `<div class="empty-state"><div class="big">📲</div><p>Aucun autre appareil détecté.<br/>Ouvre SyncView sur un autre appareil<br/>avec <strong style="color:var(--text)">le même compte Google</strong>.<br/><br/>Lien à partager :<br/><code>${location.href}</code></p></div>`;
+      return;
+    }
+    peers.sort((a,b) => (b[1].online?1:0)-(a[1].online?1:0));
+    peers.forEach(([id, dev]) => {
+      const card = document.createElement('div');
+      card.className = 'peer-card' + (dev.online ? '' : ' offline');
+      card.innerHTML = `
+        <div class="device-icon-wrap ${dev.type||'pc'}">${dev.emoji||'🖥️'}</div>
+        <div class="device-info">
+          <div class="device-name">${dev.name||'Appareil'}</div>
+          <div class="device-type">${dev.type==='phone'?'📱 Mobile':'🖥️ Ordinateur'}</div>
+        </div>
+        <div class="peer-status">
+          ${dev.online
+            ? `<div class="online-pill"><div class="dot-live"></div> En ligne</div><div class="connect-arrow" style="margin-top:.5rem;">Appuyer pour connecter →</div>`
+            : `<div class="offline-label">Hors ligne</div>`}
+        </div>`;
+      if (dev.online) card.onclick = () => initiateCall(id, dev.name || 'Appareil');
+      list.appendChild(card);
+    });
+  });
+  peersUnsub = () => ref.off('value', fn);
+}
+
+function listenIncoming(uid) {
+  const ref = db.ref(`users/${uid}/devices/${myDeviceId}/incomingCall`);
+  const fn = ref.on('value', snap => {
+    const callId = snap.val();
+    if (callId && callId !== 'null') {
+      db.ref(`users/${uid}/calls/${callId}/callerName`).once('value').then(s => {
+        document.getElementById('incoming-from').textContent = s.val() || 'Appareil inconnu';
+        pendingCallId = callId;
+        showPage('page-incoming');
+      });
+    }
+  });
+  incomingUnsub = () => ref.off('value', fn);
+}
+
+// ── CALL INIT ─────────────────────────────────────────
+async function initiateCall(targetId, targetName) {
+  isCaller = true;
+  const uid = currentUser.uid;
+  document.getElementById('connecting-to').textContent = '→ ' + targetName;
+  showPage('page-connecting');
+  setStep('s-auth', 'active');
+
+  activeCallId  = db.ref(`users/${uid}/calls`).push().key;
+  activeCallRef = db.ref(`users/${uid}/calls/${activeCallId}`);
+  await activeCallRef.set({ caller: myDeviceId, callee: targetId, callerName: devName(), status: 'calling', createdAt: firebase.database.ServerValue.TIMESTAMP });
+  await db.ref(`users/${uid}/devices/${targetId}/incomingCall`).set(activeCallId);
+
+  setStep('s-signal', 'spin');
+  document.getElementById('s-signal-label').textContent = 'En attente de ' + targetName + '…';
+
+  // Listen for answer
+  activeCallRef.child('answer').on('value', async snap => {
+    if (snap.val() && pc && !pc.currentRemoteDescription) {
+      await pc.setRemoteDescription(new RTCSessionDescription(snap.val()));
+      setStep('s-signal', 'active');
+    }
+  });
+  // Callee ICE
+  activeCallRef.child('calleeCandidates').on('child_added', async snap => {
+    if (pc && pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(snap.val())).catch(()=>{});
+  });
+
+  await startMedia('caller');
+  await createOffer();
+}
+
+async function acceptCall() {
+  isCaller = false;
+  const uid = currentUser.uid;
+  activeCallId  = pendingCallId;
+  activeCallRef = db.ref(`users/${uid}/calls/${activeCallId}`);
+  const snap = await activeCallRef.once('value');
+  const call = snap.val();
+  if (!call) { toast('Appel expiré'); showPage('page-devices'); return; }
+  document.getElementById('connecting-to').textContent = '← ' + (call.callerName || '?');
+  showPage('page-connecting');
+  setStep('s-auth', 'active');
+  await db.ref(`users/${uid}/devices/${myDeviceId}/incomingCall`).remove();
+
+  // Caller ICE
+  activeCallRef.child('callerCandidates').on('child_added', async snap => {
+    if (pc && pc.remoteDescription) await pc.addIceCandidate(new RTCIceCandidate(snap.val())).catch(()=>{});
+  });
+
+  await startMedia('callee');
+  await createAnswer(call.offer);
+}
+
+function declineCall() {
+  if (pendingCallId && currentUser) {
+    db.ref(`users/${currentUser.uid}/calls/${pendingCallId}`).update({ status: 'declined' });
+    db.ref(`users/${currentUser.uid}/devices/${myDeviceId}/incomingCall`).remove();
+    pendingCallId = null;
+  }
+  showPage('page-devices');
+}
+
+// ── MEDIA ─────────────────────────────────────────────
+async function startMedia(side) {
+  setStep('s-media', 'spin');
+  try {
+    if (side === 'caller' && !IS_MOBILE) {
+      localStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: true });
+      document.getElementById('s-media-label').textContent = '🖥️ Capture écran active';
+    } else {
+      localStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: true
+      });
+      document.getElementById('s-media-label').textContent = '📸 Caméra active';
+    }
+    setStep('s-media', 'active');
+    document.getElementById('local-video').srcObject = localStream;
+    document.getElementById('no-local').style.display = 'none';
+  } catch(e) {
+    setStep('s-media', 'err');
+    document.getElementById('s-media-label').textContent = 'Accès refusé ✗';
+    toast('❌ Permission refusée');
+    throw e;
+  }
+}
+
+// ── WEBRTC ────────────────────────────────────────────
+function buildPC() {
+  pc = new RTCPeerConnection(ICE_CFG);
+  remoteStream = new MediaStream();
+  document.getElementById('remote-video').srcObject = remoteStream;
+  if (localStream) localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+  pc.ontrack = evt => {
+    evt.streams[0].getTracks().forEach(t => remoteStream.addTrack(t));
+    document.getElementById('no-remote').style.display = 'none';
+  };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'connecting') { setStep('s-rtc','spin'); document.getElementById('s-rtc-label').textContent = 'Établissement P2P…'; }
+    if (pc.connectionState === 'connected') {
+      setStep('s-rtc','active');
+      document.getElementById('s-rtc-label').textContent = 'Connecté ✓';
+      document.getElementById('local-badge').textContent  = IS_MOBILE ? '📱 Ma caméra'    : '🖥️ Mon écran';
+      document.getElementById('remote-badge').textContent = IS_MOBILE ? '🖥️ Écran distant' : '📱 Caméra distante';
+      setTimeout(() => showPage('page-stream'), 400);
+    }
+    if (pc.connectionState === 'failed') { toast('⚡ Connexion perdue'); hangUp(); }
+  };
+}
+
+async function createOffer() {
+  buildPC();
+  const candidatesRef = activeCallRef.child('callerCandidates');
+  pc.onicecandidate = ({candidate}) => { if (candidate) candidatesRef.push(candidate.toJSON()); };
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await activeCallRef.update({ offer: { type: offer.type, sdp: offer.sdp } });
+}
+
+async function createAnswer(offer) {
+  if (!offer) {
+    setStep('s-signal','spin');
+    document.getElementById('s-signal-label').textContent = 'Attente de l\'offre…';
+    const snap = await activeCallRef.child('offer').once('value');
+    offer = snap.val();
+    if (!offer) { toast('❌ Offre introuvable'); cancelCall(); return; }
+  }
+  buildPC();
+  const candidatesRef = activeCallRef.child('calleeCandidates');
+  pc.onicecandidate = ({candidate}) => { if (candidate) candidatesRef.push(candidate.toJSON()); };
+  await pc.setRemoteDescription(new RTCSessionDescription(offer));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  await activeCallRef.update({ answer: { type: answer.type, sdp: answer.sdp }, status: 'connected' });
+  setStep('s-signal','active');
+}
+
+// ── CONTROLS ──────────────────────────────────────────
+function toggleMute() {
+  if (!localStream) return;
+  isMuted = !isMuted;
+  localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+  const btn = document.getElementById('btn-mute');
+  btn.querySelector('.ico').textContent = isMuted ? '🔇' : '🔊';
+  btn.querySelector('span:last-child').textContent = isMuted ? 'Muet' : 'Son';
+  btn.classList.toggle('active-ctrl', isMuted);
+  toast(isMuted ? '🔇 Micro coupé' : '🔊 Micro activé');
+}
+
+function toggleVideo() {
+  if (!localStream) return;
+  isVideoOff = !isVideoOff;
+  localStream.getVideoTracks().forEach(t => t.enabled = !isVideoOff);
+  const btn = document.getElementById('btn-video');
+  btn.querySelector('.ico').textContent = isVideoOff ? '🚫' : '📹';
+  btn.querySelector('span:last-child').textContent = isVideoOff ? 'Coupé' : 'Vidéo';
+  btn.classList.toggle('active-ctrl', isVideoOff);
+  toast(isVideoOff ? '📵 Vidéo coupée' : '📹 Vidéo activée');
+}
+
+function hangUp() {
+  if (pc) { pc.close(); pc = null; }
+  if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  if (activeCallRef) {
+    activeCallRef.update({ status: 'ended' });
+    setTimeout(() => { if (activeCallRef) { activeCallRef.remove(); activeCallRef = null; } }, 5000);
+  }
+  if (currentUser && myDeviceId) db.ref(`users/${currentUser.uid}/devices/${myDeviceId}/incomingCall`).remove();
+  isMuted = false; isVideoOff = false; activeCallId = null; isCaller = false;
+  showPage('page-devices');
+  toast('📴 Appel terminé');
+}
+
+function cancelCall() { hangUp(); }
+
+// ── START ─────────────────────────────────────────────
+showPage('page-auth');
+</script>
+</body>
+</html>
